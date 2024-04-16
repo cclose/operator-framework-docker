@@ -1,0 +1,45 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-push:
+    if: startsWith(github.ref, 'refs/tags/v')  # Run the job only if the tag starts with 'v'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Add Dependencies
+      run: sudo apt-get update && sudo apt-get install curl jq
+      
+    - name: Log in to Docker Hub
+      run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      
+    - name: Build and Push Docker image
+      run: bash build-image.sh "$(basename ${{ github.ref }})"
+      
+    - name: Read release notes from file
+      id: release_notes
+      run: |
+        RELEASE_NOTES=$(cat build/.release-notes)
+        echo "::set-output name=release_notes::$RELEASE_NOTES"
+
+    - name: Create GitHub release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: ${{ steps.release_notes.outputs.release_notes }}
+        draft: false
+        prerelease: false
